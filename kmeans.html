@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>kmeans动态可视化</title>
+<style type="text/css">
+
+    .axis path,
+    .axis line{
+        fill: none;
+        stroke: black;
+        shape-rendering: crispEdges;
+    }
+
+    .axis text {
+        font-family: sans-serif;
+        font-size: 11px;
+    }
+
+    #control {
+        float: left;
+        position: relative;
+        margin-top: 50px;
+        margin-left: 50px;
+    }
+
+    #hint {
+        font-family: Arial;
+    }
+
+</style>
+<script src="d3.v3.js" type="text/javascript"></script>
+<script type="text/javascript">
+
+var data = null;
+var length;
+var k = 4;
+var centroids = null;
+
+var w = 800;
+var h = 600;
+var xPadding = 100;
+var yPadding = 50;
+var xAxisHeight = 500;
+var xAxisWidth = 600;
+var edge = 15;
+var radius = 5;
+var delay = 0;
+
+var chart;
+var xScale, yScale;
+var colors = ["#E6421A", "#AECC33", "#3CC472", "#338FCC", "#723CC4"];
+
+d3.csv("data.csv",function(error, csvdata){
+
+    if(error){
+        console.log(error);
+    }
+    csvdata.sort(sortByNorm);
+    length = csvdata.length;
+    for(var i=0; i<csvdata.length; i++) {
+        csvdata[i].x = parseFloat(csvdata[i].x);
+        csvdata[i].y = parseFloat(csvdata[i].y);
+        csvdata[i].index = i;
+    }
+//            console.log(data);
+
+    data = csvdata;
+
+    chart = d3.select("body")
+            .append("svg")
+            .attr("width", w)
+            .attr("height", h);
+
+    xScale = d3.scale.linear()
+            .domain([0, d3.max(data, function(d) { return d.x; })])
+            .range([xPadding, xPadding + xAxisWidth]);//x轴
+
+    yScale = d3.scale.linear()
+            .domain([0, d3.max(data, function(d) { return d.y; })])
+            .range([xAxisHeight, yPadding]);//y轴
+
+    var xAxis = d3.svg.axis()
+            .scale(xScale)
+            .orient("bottom");
+
+    var yAxis = d3.svg.axis()
+            .scale(yScale)
+            .orient("left");
+
+    chart.append("g")
+            .attr("class","axis")
+            .attr("transform","translate("+0+","+xAxisHeight+")")
+            .call(xAxis);
+
+    chart.append("g")
+            .attr("class","axis")
+            .attr("transform","translate("+xPadding+","+0+")")
+            .call(yAxis);
+});
+
+function sortByNorm(vector1, vector2) {
+    var norm1 = vector1.x*vector1.x + vector1.y*vector1.y;
+    var norm2 = vector2.x*vector2.x + vector2.y*vector2.y;
+    return norm1 - norm2;
+}
+
+function getRandomNum(min, max)
+{
+    var range = max - min;
+    var rand = Math.random();
+    return(min + Math.floor(rand * range));
+}
+
+function contains(arr, obj) {
+    var i = arr.length;
+    while (i--) {
+        if (arr[i] === obj) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function euclDistance(vector1, vector2) {
+    var dx = vector1.x - vector2.x;
+    var dy = vector1.y - vector2.y;
+    return Math.sqrt(dx*dx + dy*dy);
+}
+
+function cosineDistance(vector1, vector2) {
+    var x1 = vector1.x;
+    var y1 = vector1.y;
+    var x2 = vector2.x;
+    var y2 = vector2.y;
+    return (x1*x2+y1*y2) / (Math.sqrt(x1*x1+y1*y1)*Math.sqrt(x2*x2+y2*y2));
+}
+
+function initCentroids(data, k) {
+    var centroids = new Array();
+    var indices = [];
+    var i = 0;
+    while(i < k) {
+        var index = getRandomNum(0, length);
+        if(contains(indices, index)) {
+            continue;
+        } else {
+            indices.push(index);
+            i++;
+            var node = {};
+            node.x = data[index].x;
+            node.y = data[index].y;
+            node.index = index;
+            centroids.push(node);
+        }
+    }
+    console.log(centroids);
+    return centroids;
+}
+
+function testInitCentroids(data, k) {
+    var center = [0, 3, 6];
+    var centroids = [];
+    for(var i=0; i<k; i++) {
+        var node = {};
+        node.x = data[center[i]].x;
+        node.y = data[center[i]].y;
+        node.index = center[i];
+        centroids.push(node);
+    }
+    return centroids;
+}
+
+function kmeans(cosine, k) {
+
+//    var centroids = initCentroids(data, k);
+//        var centroids  = testInitCentroids(data, k);
+
+    var clusterChanged = true;
+    var clusterAssment = [];
+    var clusters = [];
+
+    for(var i=0; i<k; i++) {
+        clusters.push(new Array());
+    }
+    for(var i=0; i<length; i++) {
+        clusterAssment.push(-1);
+    }
+    var i = 1;
+    while(clusterChanged) {
+        console.log("kmeans!!!");
+        clusters = [];
+        for(var i=0; i<k; i++) {
+            clusters.push(new Array());
+        }
+        clusterChanged = false;
+        for(var i=0; i<length; i++) {
+            var minDistance = 10000;
+            var maxDistance = -1000;
+            var cluster = -1;
+            for(var j=0; j<k; j++) {
+                if(cosine == 0) {
+                    var distance = euclDistance(centroids[j], data[i]);
+                    if(distance < minDistance) {
+                        minDistance = distance;
+                        cluster = j;
+                    }
+                } else if(cosine == 1) {
+                    var distance = cosineDistance(centroids[j], data[i]);
+                    if(distance > maxDistance) {
+                        maxDistance = distance;
+                        cluster = j;
+                    }
+                }
+            }
+            if(cluster != clusterAssment[i]) {
+                clusterChanged = true;
+                clusterAssment[i] = cluster;
+                changeCluster(i, cluster);
+            }
+        }
+        for(var i=0; i<length; i++) {
+            clusters[clusterAssment[i]].push(data[i]);
+        }
+        for(var i=0; i<k; i++) {
+            var sumX = 0;
+            var sumY = 0;
+            var len = clusters[i].length;
+            for(var j=0; j<len; j++) {
+                sumX += clusters[i][j].x;
+                sumY += clusters[i][j].y;
+            }
+            centroids[i].x = sumX / len;
+            centroids[i].y = sumY / len;
+            changeCentroid(centroids, i);
+        }
+    }
+
+    document.getElementById("hint").innerHTML = "kmeans will be completed in <br>" + delay/1000 +" seconds!";
+    setTimeout("alert('Kmeans is completed!')", delay);
+}
+
+function showNodes(data) {
+    chart.selectAll(".circle")
+            .data(data)
+            .enter()
+            .append('circle')
+            .attr("class", function(d, i) { return "node"+data[i].index; })
+            .attr("cx", function(d) {
+                return xScale(d.x);
+            })
+            .attr("cy", function(d) {
+                return yScale(d.y);
+            })
+            .attr("r", function(d) {
+                return radius;
+            });
+}
+
+function showCentroids(centroids) {
+    chart.selectAll(".circle")
+            .data(centroids)
+            .enter()
+            .append('rect')
+            .attr("class", function(d, i) { return "cluster"+i; })
+            .attr("fill", function(d, i) { return colors[i]; })
+            .attr("x", function(d) {
+                return xScale(d.x)-edge/2;
+            })
+            .attr("y", function(d) {
+                return yScale(d.y)-edge/2;
+            })
+//                        .attr("transform", "rotate(90)")
+            .attr("width", function(d) {
+                return edge;
+            })
+            .attr("height", function(d) {
+                return edge;
+            });
+}
+
+function changeCluster(nodeId, clusterId) {
+    chart.select(".node"+nodeId)
+            .transition()
+            .duration(100)
+            .delay(delay)
+//                        .attr("r", 15)
+            .attr("fill", colors[clusterId]);
+    delay+=100;
+}
+
+function changeCentroid(centroids, i) {
+    chart.select(".cluster"+i)
+            .transition()
+            .duration(1000)
+            .delay(delay)
+            .attr("x", function() {
+                return xScale(centroids[i].x)-edge/2;
+            })
+            .attr("y", function(d) {
+                return yScale(centroids[i].y)-edge/2;
+            });
+    delay += 1000;
+}
+
+function showClusters(clusters, centroids) {
+
+    for(var i=0; i<clusters.length; i++) {
+        chart.selectAll(".circle")
+                .data(clusters[i])
+                .enter()
+                .append('circle')
+                .attr("class", function(d, j) { return "node"+clusters[i][j].index; })
+                .attr("fill", colors[i])
+                .attr("cx", function(d) {
+                    return xScale(d.x);
+                })
+                .attr("cy", function(d) {
+                    return yScale(d.y);
+                })
+                .attr("r", function(d) {
+                    return radius;
+                });
+    }
+
+    chart.selectAll(".circle")
+            .data(centroids)
+            .enter()
+            .append('rect')
+            .attr("class", "cluster"+i)
+            .attr("fill", function(d, i) { return colors[i]; })
+            .attr("x", function(d) {
+                return xScale(d.x)-edge/2;
+            })
+            .attr("y", function(d) {
+                return yScale(d.y)-edge/2;
+            })
+//                        .attr("transform", "rotate(90)")
+            .attr("width", function(d) {
+                return edge;
+            })
+            .attr("height", function(d) {
+                return edge;
+            });
+
+
+}
+
+var showdata = false;
+
+function showData() {
+    chart.selectAll("circle").remove();
+    chart.selectAll("rect").remove();
+    showNodes(data);
+    showdata = true;
+}
+
+function selectK(e) {
+    k = parseInt(e.value);
+}
+
+function initCenter() {
+    if(!showdata) {
+        alert("请先显示数据点！");
+        return;
+    }
+    chart.selectAll("rect").remove();
+    centroids = initCentroids(data, k);
+    showCentroids(centroids);
+}
+
+var cosine = 0;
+function change(e) {
+    cosine = parseInt(e.value);
+}
+function start() {
+    delay = 0;
+    kmeans(cosine, k);
+}
+
+</script>
+</head>
+<body>
+<div id="control">
+    <button onclick="showData()">显示数据点</button><br><br>
+    聚类个数：<select onchange="selectK(this)" id="select">
+        <option value ="2">2</option>
+        <option value ="3">3</option>
+        <option value="4" selected>4</option>
+        <option value="5">5</option>
+    </select>
+    <button onclick="initCenter()">选取初始质心</button><br><br>
+    <label><input name="distance" type="radio" value="0" onclick="change(this)" checked/>欧氏距离 </label>
+    <label><input name="distance" type="radio" value="1" onclick="change(this)" />余弦距离 </label>
+    <button onclick="start()" id="start">开始</button><br><br>
+    <div id="hint"></div>
+</div>
+</body>
+</html>
